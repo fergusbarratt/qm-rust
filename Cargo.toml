@@ -1,0 +1,8 @@
+[package]
+name = "qcc"
+version = "0.1.0"
+authors = ["Fergus Barratt <fergus.barratt.12@ucl.ac.uk>"]
+
+[dependencies]
+nalgebra = "*"
+num = "*"
