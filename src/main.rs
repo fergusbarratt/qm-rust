@@ -6,29 +6,28 @@ use nalgebra::Iterable;
 use std::ops::{Add, Mul};
 
 #[derive(Debug, Clone, PartialEq)]
-struct VectorPartition(Vec<Vec<f64>>, Vec<HilbertSpace>, Vec<usize>);
-#[derive(Debug, Clone, PartialEq)]
-struct MatrixPartition(Vec<na::DMatrix<f64>>, Vec<HilbertSpace>, Vec<usize>);
+struct MatrixPartition(Option<Vec<na::DMatrix<f64>>>, Vec<HilbertSpace>, Vec<usize>);
 
 impl MatrixPartition {
-    fn new(matrices: Vec<na::DMatrix<f64>>) -> Self {
-        let dimensions = matrices.clone().iter().map(|mat| mat.nrows()).collect::<Vec<usize>>();
-        let spaces = dimensions.clone().iter().map(|dim| HilbertSpace::new(*dim)).collect::<Vec<HilbertSpace>>(); 
-        MatrixPartition(matrices, spaces, dimensions)
-    }
-    fn nil() -> Self {
-        MatrixPartition(vec![na::DMatrix::new_zeros(1, 1)], vec![HilbertSpace::nil()], vec![])
-    }
-}
-
-impl VectorPartition {
-    fn new(vectors: Vec<Vec<f64>>) -> Self {
-        let dimensions = vectors.clone().iter().map(|vec| vec.len()).collect::<Vec<usize>>();
-        let spaces = dimensions.clone().iter().map(|dim| HilbertSpace::new(*dim)).collect::<Vec<HilbertSpace>>(); 
-        VectorPartition(vectors, spaces, dimensions)
-    }
-    fn nil() -> Self {
-        VectorPartition(vec![vec![]], vec![HilbertSpace::nil()], vec![])
+    fn new(matrices: Option<Vec<na::DMatrix<f64>>>, dimensions: Option<Vec<usize>>) -> Self {
+        match matrices {
+            Some(matrices) => {
+                let dims = matrices.clone().iter().map(|mat| mat.nrows()).collect::<Vec<usize>>();
+                let spaces = dims.clone()
+                                 .iter()
+                                 .map(|dim| HilbertSpace::new(*dim))
+                                 .collect::<Vec<HilbertSpace>>();
+                MatrixPartition(Some(matrices), spaces, dims)
+            }
+            None => {
+                let spaces = dimensions.clone()
+                                       .expect("No dimensions")
+                                       .iter()
+                                       .map(|dim| HilbertSpace::new(*dim))
+                                       .collect::<Vec<HilbertSpace>>();
+                MatrixPartition(None, spaces, dimensions.unwrap())
+            }
+        }
     }
 }
 
@@ -44,9 +43,6 @@ impl HilbertSpace {
             basis: HilbertSpace::canonical_basis(dim),
             dim: dim,
         }
-    }
-    fn nil() -> HilbertSpace {
-        HilbertSpace::new(0)
     }
 
     fn partition(&self, partition: Vec<usize>) -> Vec<HilbertSpace> {
@@ -77,7 +73,7 @@ impl HilbertSpace {
         }
         ret_1
     }
-    
+
     fn zero(dim: usize) -> Vec<f64> {
         let mut ret = vec![];
         for _ in 1..dim {
@@ -99,7 +95,7 @@ struct PureState {
     at: Vec<f64>,
     space: HilbertSpace,
     dim: usize,
-    partition: MatrixPartition,
+    partition: Option<MatrixPartition>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,7 +103,7 @@ struct MixedState {
     at: na::DMatrix<f64>,
     space: HilbertSpace,
     dim: usize,
-    partition: MatrixPartition,
+    partition: Option<MatrixPartition>,
 }
 
 
@@ -117,24 +113,12 @@ impl PureState {
             at: at.clone(),
             space: HilbertSpace::new(at.len()),
             dim: at.len(),
-            partition: MatrixPartition::nil(),
+            partition: None,
         }
-    }
-    fn nil() -> PureState {
-        PureState::new(&vec![]) 
     }
     fn to_mixed(&self) -> MixedState {
         na::outer(self, self)
     }
-    // fn partition(&self, partition: Vec<usize>) -> PureState {
-    //     let partition = 
-    //     PureState {
-    //         at: self.at.clone(),
-    //         space: self.space.clone(), 
-    //         dim: self.dim,
-    //         partition:
-    //     }
-    // }
 }
 
 impl MixedState {
@@ -144,35 +128,23 @@ impl MixedState {
         }
         MixedState {
             at: at.clone(),
-            space: HilbertSpace::new(at.nrows()),
+            space: HilbertSpace::new(at.nrows() + 1),
             dim: at.nrows(),
-            partition: MatrixPartition::nil(),
+            partition: None,
         }
     }
-    fn nil() -> MixedState {
-        MixedState::new(&na::DMatrix::new_zeros(0, 0))
+    fn trace(&self) -> f64 {
+        self.space
+            .basis
+            .iter()
+            .map(|vec| PureState::new(vec) * self.clone() * PureState::new(vec))
+            .fold(0.0, |acc, x| acc + x)
     }
-    // fn partition(&mut self, partition: Vec<usize>) -> () {
-    //     if self.space.len() > 1 {
-    //         panic!("Space already partitioned");
-    //     }
-    //     self.space = self.space[0].partition(partition);
-    // }
-    // fn unpartition(&mut self) -> () {
-    //     if self.space.len() < 2 {
-    //         panic!("Space not partitioned");
-    //     }
-    //     let dim = self.space.iter().fold(0, |acc, x| acc + x.dim);
-    //     self.space = vec![HilbertSpace::new(dim)];
-    // }
-    // fn partial_trace(self, basis: usize) -> MixedState {
-    //     if self.space.len() < 2 {
-    //         panic!("Space not partitioned");
-    //     }
-    //     if basis > self.space.len() {
-    //         panic!("No such space");
-    //     }
-    // }
+    fn partition(&self, dimensions: Vec<usize>) -> Self {
+        let mut state = Self::new(&self.at);
+        state.partition = Some(MatrixPartition::new(None, Some(dimensions)));
+        state
+    }
 }
 
 impl na::Outer for PureState {
@@ -240,16 +212,22 @@ impl Add<PureState> for PureState {
 }
 
 fn main() {
-        let x = PureState::new(&vec![1.0, 2.0]);
-        // let y: MixedState = na::outer(&x, &x);
-        println!("{:?}", x);
+    let x = PureState::new(&vec![1.0, 2.0]);
+    println!("{:?}", x);
 }
 
 #[cfg(test)]
 mod tests {
     use nalgebra as na;
 
-    use super::{MixedState, PureState, HilbertSpace, MatrixPartition, VectorPartition};
+    use super::{MixedState, PureState, HilbertSpace, MatrixPartition};
+
+    #[test]
+    fn trace_test() {
+        let x = PureState::new(&vec![1.0, 2.0]);
+        let y: MixedState = na::outer(&x, &x);
+        assert_eq!(y.trace(), 5.0);
+    }
 
     #[test]
     fn outer_test() {
@@ -260,8 +238,9 @@ mod tests {
     }
     #[test]
     fn canonical() {
-        for vec in HilbertSpace::new(3).basis.iter() {
-            assert_eq!(vec.len(), 2)
+        let dim = 3;
+        for vec in HilbertSpace::new(dim).basis.iter() {
+            assert_eq!(vec.len(), dim - 1)
         }
     }
     #[test]
@@ -282,37 +261,15 @@ mod tests {
     }
 
     #[test]
-    fn vector_partition_new() {
-        let j = vec![vec![1.0, 2.0], vec![2.0, 1.0]];
-        let x = VectorPartition::new(j.clone());
-        let VectorPartition(i, _, _) = x;
-        assert_eq!(j, i);
-    }
-
-    #[test]
     fn matrix_partition_new() {
         let mut mats = vec![];
         for _ in 1..10 {
             mats.push(na::DMatrix::new_random(3, 3));
         }
-        let x = MatrixPartition::new(mats.clone());
-        let MatrixPartition(x, y, z) = x;
-        assert_eq!(x, mats);
+        let x = MatrixPartition::new(Some(mats.clone()), None);
+        let MatrixPartition(x, _, _) = x;
+        assert_eq!(x.unwrap(), mats);
     }
-
-    // #[test]
-    // #[should_panic]
-    // fn pure_state_partition_wrong_dims() {
-
-    // }
-
-    // #[test]
-    // fn pure_state_partition_new() {
-    //     let pure_state = PureState::new(&vec![1.0, 2.0, 3.0, 4.0]);
-    //     let new = pure_state.partition(vec![2, 2]);
-    // }
-
-
 
     #[test]
     fn pure_to_mixed() {
