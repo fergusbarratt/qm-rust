@@ -1,5 +1,6 @@
 extern crate nalgebra;
 extern crate num;
+extern crate itertools;
 
 use nalgebra as na;
 use nalgebra::Iterable;
@@ -141,9 +142,21 @@ impl MixedState {
             .fold(0.0, |acc, x| acc + x)
     }
     fn partition(&self, dimensions: Vec<usize>) -> Self {
+        assert!(dimensions.clone().iter().fold(0, |acc, x| acc+x) == self.dim);
         let mut state = Self::new(&self.at);
         state.partition = Some(MatrixPartition::new(None, Some(dimensions)));
         state
+    }
+    fn partial_trace(&self, index: usize) -> () {
+        let mut basis = vec![];
+        let mut temp = vec![];
+        for i in 0..self.clone().partition.expect("State is not partitioned").1[0].basis.len() {
+            for space in self.partition.clone().expect("State is not partitioned").1.iter() {
+                temp.push(space.basis[i].clone());
+            }
+            basis.push(temp);
+            temp = vec![];
+        }
     }
 }
 
@@ -222,6 +235,20 @@ mod tests {
 
     use super::{MixedState, PureState, HilbertSpace, MatrixPartition};
 
+    #[test]
+    fn partition_test() {
+        let mat = na::DMatrix::from_row_iter(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        let state = MixedState::new(&mat);
+        let new_state = state.partition(vec![2, 1]);
+        assert!(new_state.partition.is_some())
+    }
+    #[test]
+    #[should_panic]
+    fn partition_panic() {
+        let mat = na::DMatrix::from_row_iter(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        let state = MixedState::new(&mat);
+        state.partition(vec![5, 5]);
+    }
     #[test]
     fn trace_test() {
         let x = PureState::new(&vec![1.0, 2.0]);

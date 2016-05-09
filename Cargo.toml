@@ -6,3 +6,4 @@ authors = ["Fergus Barratt <fergus.barratt.12@ucl.ac.uk>"]
 [dependencies]
 nalgebra = "*"
 num = "*"
+itertools = "*"

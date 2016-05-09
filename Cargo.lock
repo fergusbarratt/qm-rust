@@ -2,9 +2,15 @@
 name = "qcc"
 version = "0.1.0"
 dependencies = [
+ "itertools 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "nalgebra 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "itertools"
+version = "0.4.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "libc"
